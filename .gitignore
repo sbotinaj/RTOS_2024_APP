@@ -4,3 +4,4 @@
 \components
 project/CMakeLists.txt
 project/sdkconfig
+project/main/CMakeLists.txt
