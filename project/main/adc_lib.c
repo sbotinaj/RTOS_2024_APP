@@ -9,14 +9,14 @@ void init_adc(int ADC_ATTEN, int ADC_BITWIDTH, int ADC_CHAN, adc_oneshot_unit_ha
     adc_oneshot_unit_init_cfg_t init_config2 = {
         .unit_id = ADC_UNIT_2,
     };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config2, &adc_handle));
+    adc_oneshot_new_unit(&init_config2, &adc_handle);
 
     //-------------ADC2 Config---------------//
     adc_oneshot_chan_cfg_t config = {
         .atten = ADC_ATTEN,
         .bitwidth = ADC_BITWIDTH,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, ADC_CHAN, &config));
+    adc_oneshot_config_channel(adc_handle, ADC_CHAN, &config);
 }
 
 // calibrate ADC
