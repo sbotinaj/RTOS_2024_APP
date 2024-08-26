@@ -22,12 +22,7 @@
 //log tag
 const static char *TAG = "ADC";
 const static char *TAG2 = "ERROR";
-// ADC handle
-adc_oneshot_unit_handle_t adc2_handle;
 
-//adc handle for adc2 calibration
-adc_cali_handle_t adc2_handle_cali_ch6 = NULL;
-adc_cali_handle_t adc2_handle_cali_ch4 = NULL;
 
 static int adc_value;
 //static int adc_value2;
@@ -59,15 +54,40 @@ void app_main(void)
 
     // initialize the led rgb
     init_rgb(PIN_RED, PIN_GREEN, PIN_BLUE);
-    // initialize the adc
-    init_adc(ADC2_ATTEN, ADC2_BITWIDTH, ADC2_CHAN6, adc2_handle);
-    init_adc(ADC2_ATTEN, ADC2_BITWIDTH, ADC2_CHAN4, adc2_handle);
-    if(adc2_handle == NULL) {
-        ESP_LOGE(TAG2, "ADC2 handle is NULL");
-    }
-    // calibrate the adc
-    calibrate_adc(ADC2_ATTEN, ADC2_BITWIDTH, ADC2_CHAN6, adc2_handle_cali_ch6);
-    calibrate_adc(ADC2_ATTEN, ADC2_BITWIDTH, ADC2_CHAN4, adc2_handle_cali_ch4);
+    
+    // INITIAL ADC
+    // ADC handle
+    adc_oneshot_unit_handle_t adc2_handle;
+    //adc handle for adc2 calibration
+    adc_cali_handle_t adc2_handle_cali_ch6 = NULL;
+    adc_cali_handle_t adc2_handle_cali_ch4 = NULL;
+
+    // Initialize ADC whitout adc_lib
+
+    //-------------ADC2 Init---------------//
+    adc_oneshot_unit_init_cfg_t init_config2 = {
+        .unit_id = ADC_UNIT_2,
+    };
+    adc_oneshot_new_unit(&init_config2, &adc2_handle);
+
+    //-------------ADC2 Config---------------//
+    adc_oneshot_chan_cfg_t config = {
+        .atten = ADC2_ATTEN,
+        .bitwidth = ADC2_BITWIDTH,
+    };
+    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN6, &config);
+    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN4, &config);
+    // calibrate the adc whitout adc_lib
+    //-------------ADC2 Calibrate---------------//
+    // Calibrate ADC line fitting
+    adc_cali_line_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT_2, // Replace 'unit' with 'ADC_UNIT_2'
+        .atten = ADC2_ATTEN,
+        .bitwidth = ADC2_BITWIDTH,
+    };
+    esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch6); // Declare 'ret' variable
+    ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch4); // Declare 'ret' variable
+
 
     while(1)  
     {
