@@ -12,9 +12,9 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 
+
 // Include the header file
 #include "rgb.h"
-#include "adc_lib.h"
 
 // Global Variables
 #define HEARTBEAT_GPIO 2 // GPIO2 is the built-in LED on the ESP32
@@ -28,6 +28,12 @@ static int adc_value;
 //static int adc_value2;
 static int adc_voltage;
 //static int adc_voltage2;
+
+int ADC2_ATTEN = ADC_ATTEN_DB_0;
+int ADC2_BITWIDTH = ADC_BITWIDTH_11;
+int ADC2_CHAN6 = ADC_CHANNEL_6;
+int ADC2_CHAN4 = ADC_CHANNEL_4;
+
 
 /*BEGIN FUNTIONS AND TASK DECLARATIONS*/
 
@@ -85,8 +91,8 @@ void app_main(void)
         .atten = ADC2_ATTEN,
         .bitwidth = ADC2_BITWIDTH,
     };
-    esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch6); // Declare 'ret' variable
-    ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch4); // Declare 'ret' variable
+    adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch6); // Declare 'ret' variable
+    adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch4); // Declare 'ret' variable
 
 
     while(1)  
@@ -98,9 +104,13 @@ void app_main(void)
         ESP_LOGI(TAG, "ADC Value: %d", adc_value);
         vTaskDelay(pdMS_TO_TICKS(1000));
         // read the voltage
-        adc_cali_raw_to_voltage(adc2_handle_cali_ch6, ADC_CHANNEL_6, &adc_voltage);
+        adc_cali_raw_to_voltage(adc2_handle_cali_ch6, adc_value, &adc_voltage);
         ESP_LOGI(TAG, "ADC Voltage: %dmV", adc_voltage);
         vTaskDelay(pdMS_TO_TICKS(1000));
+
+        // change the color of the RGB LED based on the ADC value
+        set_rgb_color(adc_value, 0, 0);
+
 
     }
 }
