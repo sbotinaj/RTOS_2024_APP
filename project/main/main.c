@@ -5,6 +5,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_system.h" // Add this line to include the header file
@@ -12,18 +13,17 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 
-
 // Include the header file
 #include "rgb.h"
 
 // Global Variables
 #define HEARTBEAT_GPIO 2 // GPIO2 is the built-in LED on the ESP32
-
-//log tag
+#define QUEUE_SIZE 10 // Size queue for tasks
+//LOGS TAGS
 const static char *TAG = "ADC";
 const static char *TAG2 = "ERROR";
 
-
+// ADC Variables
 static int adc_value;
 //static int adc_value2;
 static int adc_voltage;
@@ -34,6 +34,12 @@ int ADC2_BITWIDTH = ADC_BITWIDTH_11;
 int ADC2_CHAN6 = ADC_CHANNEL_6;
 int ADC2_CHAN4 = ADC_CHANNEL_4;
 
+// NTC Variables
+int B_constant = 3200; // B constant for NTC in Kelvin
+int R0 = 47; // Resistance at T0 in Ohm
+int T0 = 25; // Temperature at T0 in Celsius
+
+#define NTC_TABLE_SIZE (sizeof(temp_voltage_table) / sizeof(temp_voltage_table[0]))
 
 /*BEGIN FUNTIONS AND TASK DECLARATIONS*/
 
@@ -41,6 +47,7 @@ int ADC2_CHAN4 = ADC_CHANNEL_4;
 // Task functions
 void heartbeat_task(void *pvParameter);
 void blink_rgb_task(void *pvParameter);
+void voltage_to_temp_task(void *pvParameter);
 
 /*END FUNTIONS AND TASK DECLARATIONS*/
 
@@ -81,8 +88,8 @@ void app_main(void)
         .atten = ADC2_ATTEN,
         .bitwidth = ADC2_BITWIDTH,
     };
-    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN6, &config);
-    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN4, &config);
+    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN6, &config); // Potenciometer input
+    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN4, &config); // NTC input
     // calibrate the adc whitout adc_lib
     //-------------ADC2 Calibrate---------------//
     // Calibrate ADC line fitting
@@ -99,17 +106,26 @@ void app_main(void)
     {
         // Create task heartbeat
         xTaskCreate(&heartbeat_task, "heartbeat_task", 2048, NULL, 1, NULL);
+
         // Read ADC values and display voltage
         adc_oneshot_read(adc2_handle, ADC_CHANNEL_6, &adc_value);
         ESP_LOGI(TAG, "ADC Value: %d", adc_value);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(100));
         // read the voltage
         adc_cali_raw_to_voltage(adc2_handle_cali_ch6, adc_value, &adc_voltage);
         ESP_LOGI(TAG, "ADC Voltage: %dmV", adc_voltage);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        // Read ADC values and display voltage for NTC
+        adc_oneshot_read(adc2_handle, ADC_CHANNEL_4, &adc_value);
+        ESP_LOGI(TAG, "ADC Value NTC: %d", adc_value);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        // read the voltage for NTC
+        adc_cali_raw_to_voltage(adc2_handle_cali_ch4, adc_value, &adc_voltage);
+        ESP_LOGI(TAG, "ADC Voltage NTC: %dmV", adc_voltage);
 
         // change the color of the RGB LED based on the ADC value
-        set_rgb_color(adc_value, 0, 0);
+        fade_rgb_color(adc_value);
 
 
     }
@@ -147,5 +163,22 @@ void blink_rgb_task(void *pvParameter)
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
+
+// voltage to temperature task function
+void voltage_to_temp_task(void *pvParameter)
+{
+    float res_serie = 100 ;// resistance connected in series with the NTC
+    float Vcc = 3.3 ;// voltage of the power supply
+    float T; // declare the variable 'T'
+    while(1) {
+        // calculate the temperature from the voltage
+        // calculate the resistance of the NTC
+        float R = (adc_voltage * res_serie) / (Vcc - adc_voltage);
+        // calculate the temperature
+        T = B_constant / (log(R / R0) + (B_constant / (T0 + 273.15))) - 273.15; // convert to Celsius
+    }
+    return T;
+}
+
 
 /*END TASKS DEFINITIONS*/

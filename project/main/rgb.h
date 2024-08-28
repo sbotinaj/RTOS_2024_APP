@@ -32,4 +32,6 @@ void init_rgb(int GPIO_RED, int GPIO_GREEN, int GPIO_BLUE);
  */
 void set_rgb_color(int red, int green, int blue);
 
+void fade_rgb_color(int adc_input);
+
 #endif // RGB_H

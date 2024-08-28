@@ -57,7 +57,16 @@ void set_rgb_color(int red, int green, int blue) {
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_2);
 }
 
+void fade_rgb_color(int adc_input) {
 
+    // Fade the RGB color based on the ADC input
+    int red = adc_input;
+    int green = 1023 - adc_input;
+    int blue = 0;
+
+    // Set the RGB color
+    set_rgb_color(red, green, blue);
+}
 
 
 
