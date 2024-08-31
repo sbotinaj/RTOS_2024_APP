@@ -8,177 +8,344 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "esp_system.h" // Add this line to include the header file
+#include "esp_system.h"  // Add this line to include the header file
 #include "driver/ledc.h" // Add this line to include the header file
+
+// ADC one-shot library
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+
+#include <math.h>        // Add this line to include the header file
+#include "driver/uart.h" // Add this line to include the header file
 
 // Include the header file
 #include "rgb.h"
 
-// Global Variables
-#define HEARTBEAT_GPIO 2 // GPIO2 is the built-in LED on the ESP32
-#define QUEUE_SIZE 10 // Size queue for tasks
-//LOGS TAGS
-const static char *TAG = "ADC";
-const static char *TAG2 = "ERROR";
+/*BEGIN GLOBAL VARIABLES*/
 
-// ADC Variables
-static int adc_value;
-//static int adc_value2;
-static int adc_voltage;
-//static int adc_voltage2;
+// variables for Queue
 
-int ADC2_ATTEN = ADC_ATTEN_DB_0;
-int ADC2_BITWIDTH = ADC_BITWIDTH_11;
-int ADC2_CHAN6 = ADC_CHANNEL_6;
-int ADC2_CHAN4 = ADC_CHANNEL_4;
+QueueHandle_t adcQueue;  // Queue for the ADC values
+QueueHandle_t rgbQueue;  // Queue for the RGB values
+QueueHandle_t uartQueue; // Queue for the UART values
 
-// NTC Variables
-int B_constant = 3200; // B constant for NTC in Kelvin
-int R0 = 47; // Resistance at T0 in Ohm
-int T0 = 25; // Temperature at T0 in Celsius
+// Queue for commands
 
-#define NTC_TABLE_SIZE (sizeof(temp_voltage_table) / sizeof(temp_voltage_table[0]))
+QueueHandle_t R0Queue; // Queue for the R0 values
+QueueHandle_t T0Queue; // Queue for the T0 values
+QueueHandle_t BQueue;  // Queue for the B values
 
-/*BEGIN FUNTIONS AND TASK DECLARATIONS*/
-
-// Function declarations
-// Task functions
-void heartbeat_task(void *pvParameter);
-void blink_rgb_task(void *pvParameter);
-void voltage_to_temp_task(void *pvParameter);
-
-/*END FUNTIONS AND TASK DECLARATIONS*/
-
-/*BEGIN MAIN CODE*/
-void app_main(void) 
-{
-    
-    // Set log level to INFO
-    esp_log_level_set("*", ESP_LOG_INFO);
-  
-
-    // Configure GPIO for heartbeat
-    gpio_config_t io_conf;
-    io_conf.pin_bit_mask = (1ULL << HEARTBEAT_GPIO);
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    gpio_config(&io_conf);
-
-    // initialize the led rgb
-    init_rgb(PIN_RED, PIN_GREEN, PIN_BLUE);
-    
-    // INITIAL ADC
-    // ADC handle
-    adc_oneshot_unit_handle_t adc2_handle;
-    //adc handle for adc2 calibration
-    adc_cali_handle_t adc2_handle_cali_ch6 = NULL;
-    adc_cali_handle_t adc2_handle_cali_ch4 = NULL;
-
-    // Initialize ADC whitout adc_lib
-
-    //-------------ADC2 Init---------------//
-    adc_oneshot_unit_init_cfg_t init_config2 = {
-        .unit_id = ADC_UNIT_2,
-    };
-    adc_oneshot_new_unit(&init_config2, &adc2_handle);
-
-    //-------------ADC2 Config---------------//
-    adc_oneshot_chan_cfg_t config = {
-        .atten = ADC2_ATTEN,
-        .bitwidth = ADC2_BITWIDTH,
-    };
-    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN6, &config); // Potenciometer input
-    adc_oneshot_config_channel(adc2_handle, ADC2_CHAN4, &config); // NTC input
-    // calibrate the adc whitout adc_lib
-    //-------------ADC2 Calibrate---------------//
-    // Calibrate ADC line fitting
-    adc_cali_line_fitting_config_t cali_config = {
-        .unit_id = ADC_UNIT_2, // Replace 'unit' with 'ADC_UNIT_2'
-        .atten = ADC2_ATTEN,
-        .bitwidth = ADC2_BITWIDTH,
-    };
-    adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch6); // Declare 'ret' variable
-    adc_cali_create_scheme_line_fitting(&cali_config, &adc2_handle_cali_ch4); // Declare 'ret' variable
+QueueHandle_t rangeTempMinQueue; // Queue for the range temperature min values
+QueueHandle_t rangeTempMaxQueue; // Queue for the range temperature max values
 
 
-    while(1)  
-    {
-        // Create task heartbeat
-        xTaskCreate(&heartbeat_task, "heartbeat_task", 2048, NULL, 1, NULL);
+// time of sending the data to the Queue and receiving the data from the Queue
 
-        // Read ADC values and display voltage
-        adc_oneshot_read(adc2_handle, ADC_CHANNEL_6, &adc_value);
-        ESP_LOGI(TAG, "ADC Value: %d", adc_value);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        // read the voltage
-        adc_cali_raw_to_voltage(adc2_handle_cali_ch6, adc_value, &adc_voltage);
-        ESP_LOGI(TAG, "ADC Voltage: %dmV", adc_voltage);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        // Read ADC values and display voltage for NTC
-        adc_oneshot_read(adc2_handle, ADC_CHANNEL_4, &adc_value);
-        ESP_LOGI(TAG, "ADC Value NTC: %d", adc_value);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        // read the voltage for NTC
-        adc_cali_raw_to_voltage(adc2_handle_cali_ch4, adc_value, &adc_voltage);
-        ESP_LOGI(TAG, "ADC Voltage NTC: %dmV", adc_voltage);
+const TickType_t xTicksToWait = 100 / portTICK_PERIOD_MS;
 
-        // change the color of the RGB LED based on the ADC value
-        fade_rgb_color(adc_value);
+// ADC configuration
 
+#define ADC_NUM ADC_UNIT_2        // ADC2
+#define ADC_CHANNEL 4             // GPIO 32
+#define ADC_WIDTH 12              // 12 bits
+#define ADC_ATTEN ADC_ATTEN_DB_12 // attenuation of 11 dB
 
-    }
-}
-/*END MAIN CODE*/
+// variables for UART init
+#define TXD_PIN (GPIO_NUM_1)
+#define RXD_PIN (GPIO_NUM_3)
+#define UART_NUM UART_NUM_0
 
-/*BEGIN FUNTIONS DEFINITIOS*/
+// variables for UART configuration
+#define BAUD_RATE 115200
+#define DATA_BITS UART_DATA_8_BITS
+#define STOP_BITS 1
+#define PARITY UART_PARITY_DISABLE
 
+// variables for UART buffer
+
+#define BUF_SIZE (1024)
+
+// ranges for the temperature
+
+static int RANGE_TEMP_MIN = 15;
+static int RANGE_TEMP_MAX = 25;
+
+// variables for NTC
+
+/*END GLOBAL VARIABLES*/
+
+/*BEGIN FUNCTION DEFINITIONS*/
+
+// init oneshot ADC2 chnnel 4
+
+/*END FUNCTION DEFINITIONS*/
 
 /*BEGIN TASKS DEFINITIONS*/
 
-// heartbeat task function
-void heartbeat_task(void *pvParameter)
-{
-    while(1) {
-        // turn the LED on
-        gpio_set_level(HEARTBEAT_GPIO, 1);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        // turn the LED off
-        gpio_set_level(HEARTBEAT_GPIO, 0);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-}
+static void heartbeat_task(void *pvParameters);
 
-// blink rgb task function
-void blink_rgb_task(void *pvParameter)
-{
-    while(1) {
-        // blink the RGB LED
-        set_rgb_color(1023, 0, 0);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        set_rgb_color(0, 1023, 0);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        set_rgb_color(0, 0, 1023);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-}
+static void uart_task(void *pvParameters);
 
-// voltage to temperature task function
-void voltage_to_temp_task(void *pvParameter)
-{
-    float res_serie = 100 ;// resistance connected in series with the NTC
-    float Vcc = 3.3 ;// voltage of the power supply
-    float T; // declare the variable 'T'
-    while(1) {
-        // calculate the temperature from the voltage
-        // calculate the resistance of the NTC
-        float R = (adc_voltage * res_serie) / (Vcc - adc_voltage);
-        // calculate the temperature
-        T = B_constant / (log(R / R0) + (B_constant / (T0 + 273.15))) - 273.15; // convert to Celsius
-    }
-    return T;
-}
+static void temp_read_task(void *pvParameters);
 
+static void rgb_task(void *pvParameters);
 
 /*END TASKS DEFINITIONS*/
+
+/*BEGIN MAIN CODE*/
+void app_main(void)
+{
+    
+    
+    // create the Queue
+    adcQueue = xQueueCreate(10, sizeof(int32_t));
+    rgbQueue = xQueueCreate(10, sizeof(float_t));
+    uartQueue = xQueueCreate(10, sizeof(int32_t));
+
+    // create the Queue for the commands
+     R0Queue = xQueueCreate(2, sizeof(int32_t));
+     T0Queue = xQueueCreate(2, sizeof(int32_t));
+     BQueue = xQueueCreate(2, sizeof(int32_t));
+    // // initialize the RGB LED
+    // create the heartbeat task
+    xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 2, NULL, 1, NULL);
+    // create the UART task
+    xTaskCreate(uart_task, "uart_task", 1024 * 4, NULL, 10, NULL);
+    xTaskCreatePinnedToCore(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL, 0);
+    //  create the temperature read task
+    //xTaskCreate(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL);
+    // create the RGB task
+    // xTaskCreate(rgb_task, "rgb_task", 1024 * 4, NULL, 2, NULL);
+    // xTaskCreatePinnedToCore(rgb_task, "rgb_task", 1024 * 4, NULL, 4, NULL, 0);
+    // delay for 0.1 seconds
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+}
+/*END MAIN CODE*/
+
+/*BEGIN FUNCTION PROTOTYPES*/
+
+// function adc_init
+
+/*END FUNCTION PROTOTYPES*/
+
+/*BEGIN TASKS PROTOTYPES*/
+static void uart_task(void *pvParameters)
+{
+    // configure the UART
+    uart_config_t uart_config = {
+        .baud_rate = BAUD_RATE,
+        .data_bits = DATA_BITS,
+        .parity = PARITY,
+        .stop_bits = STOP_BITS,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT};
+    uart_driver_install(UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0);
+    uart_param_config(UART_NUM, &uart_config);
+    uart_set_pin(UART_NUM, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+
+    // configure a temporary buffer for the incoming data
+    uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
+
+    while (1)
+    {
+        // read data from the UART
+        int len = uart_read_bytes(UART_NUM, data, (BUF_SIZE - 1), 100 / portTICK_PERIOD_MS);
+        if (len > 0)
+        {
+            // print the data to the console
+            printf("Received data: %s\n", data);
+
+            // COMMANDS
+            // if the command is "R0=num;"
+            if (strncmp((char *)data, "R0=", 3) == 0)
+            {
+                // get the number from the command
+                int R0 = strtol((char *)&data[3], NULL, 10);
+                xQueueSend(R0Queue, &R0, 100 / portTICK_PERIOD_MS);
+                printf("changed R0 to: %d\n", R0);
+            }
+            // if the command is "T0=num;"
+            else if (strncmp((char *)data, "T0=", 3) == 0)
+            {
+                // get the number from the command
+                int T0 = strtof((char *)&data[3], NULL);
+                xQueueSend(T0Queue, &T0, 100 / portTICK_PERIOD_MS);
+                printf("changed T0 to: %d\n", T0);
+            }
+            // if the command is "B=num;"
+            else if (strncmp((char *)data, "B=", 2) == 0)
+            {
+                // get the number from the command
+                int B = strtof((char *)&data[2], NULL);
+                xQueueSend(BQueue, &B, 100 / portTICK_PERIOD_MS);
+                printf("changed B to: %d\n", B);
+            }
+            // if the command is "RANGE_TEMP_MIN=num;"
+            else if (strncmp((char *)data, "RANGE_TEMP_MIN=", 15) == 0)
+            {
+                // get the number from the command
+                int RANGE_TEMP_MIN = strtol((char *)&data[15], NULL, 10);
+                xQueueSend(uartQueue, &RANGE_TEMP_MIN, 100 / portTICK_PERIOD_MS);
+                printf("changed RANGE_TEMP_MIN to: %d\n", RANGE_TEMP_MIN);
+            }
+            // if the command is "RANGE_TEMP_MAX=num;"
+            else if (strncmp((char *)data, "RANGE_TEMP_MAX=", 15) == 0)
+            {
+                // get the number from the command
+                int RANGE_TEMP_MAX = strtol((char *)&data[15], NULL, 10);
+                xQueueSend(uartQueue, &RANGE_TEMP_MAX, 100 / portTICK_PERIOD_MS);
+                printf("changed RANGE_TEMP_MAX to: %d\n", RANGE_TEMP_MAX);
+            }
+            else
+            {
+                // print an error message
+                printf("Invalid command\n");
+            }
+        }
+    }
+}
+
+static void temp_read_task(void *pvParameters)
+{
+    int32_t R0;
+    int32_t T0;
+    int32_t B;
+    // ADC INIT
+    //  variables for the ADC value
+    int adc_reading = 0;
+    int voltage = 0;
+    float temp = 0;
+
+    adc_cali_handle_t handle_calibrated;
+    //-------------ADC2 Init---------------//
+    adc_oneshot_unit_handle_t adc2_handle;
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_NUM,
+    };
+    adc_oneshot_new_unit(&init_config, &adc2_handle);
+
+    //-------------ADC2 Config---------------//
+    adc_oneshot_chan_cfg_t config = {
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    adc_oneshot_config_channel(adc2_handle, ADC_CHANNEL, &config);
+
+    //-------------ADC2 Calibration---------------//
+    // calibration with line fitting
+    adc_cali_line_fitting_config_t cali_config = {
+        .unit_id = ADC_NUM,
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_WIDTH,
+    };
+    adc_cali_create_scheme_line_fitting(&cali_config, &handle_calibrated);
+    R0 = 10000;
+    T0 = 25;
+    B = 3950;
+
+    // receive the NTC values from the Queue
+    
+    // variables for calculating the temperature
+    float Rt = 0;
+
+    // verifica si se envio el valor R0 por la cola, de lo contrario se usa el valor por defecto
+    while (1)
+    {
+        if(xQueueReceive(R0Queue, &R0, 0) == pdTRUE){
+            printf("R0: %d\n", (int)R0);
+        }
+
+        xQueueReceive(T0Queue, &T0, 0);
+
+        xQueueReceive(BQueue, &B, 0);
+        // read the ADC value
+        adc_oneshot_read(adc2_handle, ADC_CHANNEL, &adc_reading);
+        // convert the ADC value to voltage
+        adc_cali_raw_to_voltage(handle_calibrated, adc_reading, &voltage);
+        // convert the voltage to temperature
+        Rt = abs((R0 * (voltage) / (333 - (voltage))));
+        temp = (B / log(Rt / R0))- 273.15;
+        printf("ADC: %d, Voltage: %d mV, Temperature: %.2f C\n", adc_reading, voltage, temp);
+        // delay for 1 second
+        vTaskDelay(xTicksToWait);
+
+        // send the temperature to the Queue
+        xQueueSend(adcQueue, &temp, xTicksToWait);
+    }
+}
+
+// RGB task
+
+static void rgb_task(void *pvParameters)
+{
+    init_rgb(PIN_RED, PIN_GREEN, PIN_BLUE);
+    set_rgb_color(0, 0, 0);
+
+    // adc value
+    int temp;
+    // variables for the RGB values
+    uint32_t red = 0;
+    uint32_t green = 0;
+    uint32_t blue = 0;
+    // set the RGB color
+    // set_rgb_color(red, green, blue);
+    xQueueReceive(adcQueue, &temp, xTicksToWait); // temp from the Queue
+    // get the ranges temperature from the Queue
+    if (xQueueReceive(uartQueue, &RANGE_TEMP_MIN, xTicksToWait) != pdTRUE)
+    {
+        RANGE_TEMP_MIN = 15;
+        printf("Error al recibir la temperatura minima\n");
+    }
+    if (xQueueReceive(uartQueue, &RANGE_TEMP_MAX, xTicksToWait) != pdTRUE)
+    {
+        RANGE_TEMP_MAX = 25;
+        printf("Error al recibir la temperatura maxima\n");
+    }
+
+    while (1)
+    {
+
+        // change the RGB color based on the temperature
+        if (temp < RANGE_TEMP_MIN)
+        {
+            red = 255;
+            green = 0;
+            blue = 0;
+            set_rgb_color(red, green, blue);
+        }
+        else if (temp > RANGE_TEMP_MAX)
+        {
+            red = 0;
+            green = 0;
+            blue = 255;
+            set_rgb_color(red, green, blue);
+        }
+        else
+        {
+            red = 0;
+            green = 255;
+            blue = 0;
+            set_rgb_color(red, green, blue);
+        }
+        // delay for 0.1 second
+        vTaskDelay(xTicksToWait);
+    }
+}
+
+static void heartbeat_task(void *pvParameters)
+{
+    // configure the GPIO pin 2
+    gpio_reset_pin(GPIO_NUM_2);
+    gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
+    // loop forever
+    while (1)
+    {
+        // toggle the GPIO pin 2
+        gpio_set_level(GPIO_NUM_2, 0);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        gpio_set_level(GPIO_NUM_2, 1);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+/*END TASKS PROTOTYPES*/
