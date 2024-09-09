@@ -208,6 +208,7 @@ static void uart_task(void *pvParameters)
 
 static void temp_read_task(void *pvParameters)
 {
+    int32_t R_serie = 100;
     int32_t R0;
     int32_t T0;
     int32_t B;
@@ -263,9 +264,11 @@ static void temp_read_task(void *pvParameters)
         adc_oneshot_read(adc2_handle, ADC_CHANNEL, &adc_reading);
         // convert the ADC value to voltage
         adc_cali_raw_to_voltage(handle_calibrated, adc_reading, &voltage);
+        // convert the mv to v 
+        voltage = voltage / 1000;
         // convert the voltage to temperature
-        Rt = abs((R0 * (voltage) / (333 - (voltage))));
-        temp = (B / log(Rt / R0))- 273.15;
+        Rt = (-voltage * R_serie) / (voltage - 3.3);
+        temp = (B*T0)/(T0*(B-log(Rt/R0)))-273.15;
         printf("ADC: %d, Voltage: %d mV, Temperature: %.2f C\n", adc_reading, voltage, temp);
         // delay for 1 second
         vTaskDelay(xTicksToWait);
