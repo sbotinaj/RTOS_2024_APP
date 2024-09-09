@@ -18,24 +18,43 @@
 typedef void (*wifi_connected_event_callback_t)(void);
 
 // WiFi application settings
-#define WIFI_AP_SSID				"ESP32_Victor"			// AP name
-#define WIFI_AP_PASSWORD			"victor1234"			// AP password
-#define WIFI_AP_CHANNEL				1					// AP channel
-#define WIFI_AP_SSID_HIDDEN			0					// AP visibility
-#define WIFI_AP_MAX_CONNECTIONS		5					// AP max clients
-#define WIFI_AP_BEACON_INTERVAL		100					// AP beacon: 100 milliseconds recommended
-#define WIFI_AP_IP					"192.168.0.1"		// AP default IP
-#define WIFI_AP_GATEWAY				"192.168.0.1"		// AP default Gateway (should be the same as the IP)
-#define WIFI_AP_NETMASK				"255.255.255.0"		// AP netmask
-#define WIFI_AP_BANDWIDTH			WIFI_BW_HT20		// AP bandwidth 20 MHz (40 MHz is the other option)
-#define WIFI_STA_POWER_SAVE			WIFI_PS_NONE		// Power save not used
-#define MAX_SSID_LENGTH				32					// IEEE standard maximum
-#define MAX_PASSWORD_LENGTH			64					// IEEE standard maximum
-#define MAX_CONNECTION_RETRIES		5					// Retry number on disconnect
+#define WIFI_AP_SSID "ESP32_SERGIO"     // AP name
+#define WIFI_AP_PASSWORD "sergio123"    // AP password
+#define WIFI_AP_CHANNEL 1               // AP channel
+#define WIFI_AP_SSID_HIDDEN 0           // AP visibility
+#define WIFI_AP_MAX_CONNECTIONS 5       // AP max clients
+#define WIFI_AP_BEACON_INTERVAL 100     // AP beacon: 100 milliseconds recommended
+#define WIFI_AP_IP "192.168.0.1"        // AP default IP
+#define WIFI_AP_GATEWAY "192.168.0.1"   // AP default Gateway (should be the same as the IP)
+#define WIFI_AP_NETMASK "255.255.255.0" // AP netmask
+#define WIFI_AP_BANDWIDTH WIFI_BW_HT20  // AP bandwidth 20 MHz (40 MHz is the other option)
+
+// Wifi station settings
+#define WIFI_STA_POWER_SAVE WIFI_PS_NONE  // Power save mode for the station
+#define WIFI_STA_SSID "botina"            // SSID for the station
+#define WIFI_STA_PASSWORD "gire2021"      // Password for the station
+#define WIFI_STA_CHANNEL 0                // Channel for the station
+#define WIFI_STA_BANDWIDTH WIFI_BW_HT20   // Bandwidth for the station
+#define WIFI_STA_AUTH_MODE WIFI_AUTH_OPEN // Authentication mode for the station
+#define WIFI_STA_SAE_MODE WPA3_SAE_PWE_HUNT_AND_PECK // SAE mode for the station
+#define WIFI_STA_H2E_ID ""                // H2E ID for the station
+
+#define MAX_SSID_LENGTH 32       // IEEE standard maximum
+#define MAX_PASSWORD_LENGTH 64   // IEEE standard maximum
+#define MAX_CONNECTION_RETRIES 5 // Retry number on disconnect
+
+#define WIFI_APP_TASK_STACK_SIZE 4096 // Task stack size
+#define WIFI_APP_TASK_PRIORITY 5      // Task priority
+#define WIFI_APP_TASK_CORE_ID 1       // Task core ID   0 or 1
+
+// API settings
+
+#define API_TIME_URL "http://worldtimeapi.org/api/timezone/America/Bogota"
+#define API_TIME_HOST "worldtimeapi.org"
 
 // netif object for the Station and Access Point
-extern esp_netif_t* esp_netif_sta;
-extern esp_netif_t* esp_netif_ap;
+extern esp_netif_t *esp_netif_sta;
+extern esp_netif_t *esp_netif_ap;
 
 /**
  * Message IDs for the WiFi application task
@@ -43,12 +62,12 @@ extern esp_netif_t* esp_netif_ap;
  */
 typedef enum wifi_app_message
 {
-	WIFI_APP_MSG_START_HTTP_SERVER = 0,
-	WIFI_APP_MSG_CONNECTING_FROM_HTTP_SERVER,
-	WIFI_APP_MSG_STA_CONNECTED_GOT_IP,
-	WIFI_APP_MSG_USER_REQUESTED_STA_DISCONNECT,
-	WIFI_APP_MSG_LOAD_SAVED_CREDENTIALS,
-	WIFI_APP_MSG_STA_DISCONNECTED,
+    WIFI_APP_MSG_START_HTTP_SERVER = 0,
+    WIFI_APP_MSG_CONNECTING_FROM_HTTP_SERVER,
+    WIFI_APP_MSG_STA_CONNECTED_GOT_IP,
+    WIFI_APP_MSG_USER_REQUESTED_STA_DISCONNECT,
+    WIFI_APP_MSG_LOAD_SAVED_CREDENTIALS,
+    WIFI_APP_MSG_STA_DISCONNECTED,
 } wifi_app_message_e;
 
 /**
@@ -57,7 +76,7 @@ typedef enum wifi_app_message
  */
 typedef struct wifi_app_queue_message
 {
-	wifi_app_message_e msgID;
+    wifi_app_message_e msgID;
 } wifi_app_queue_message_t;
 
 /**
@@ -76,7 +95,7 @@ void wifi_app_start(void);
 /**
  * Gets the wifi configuration
  */
-wifi_config_t* wifi_app_get_wifi_config(void);
+wifi_config_t *wifi_app_get_wifi_config(void);
 
 /**
  * Sets the callback function.

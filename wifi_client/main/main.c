@@ -19,6 +19,8 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+#include "wifi_std.h"
+
 
 void app_main(void)
 {
