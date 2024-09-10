@@ -15,6 +15,7 @@
 
 // Tag used for ESP serial console messages
 static const char TAG[] = "wifi_app";
+static const char TAG_HTTP[] = "htttp_client";
 //static const char TAG_STA[] = "wifi_sta";
 
 // Queue handle used to manipulate the main queue of events
@@ -64,6 +65,7 @@ static void wifi_app_event_handler(void *arg, esp_event_base_t event_base, int32
 
 		case WIFI_EVENT_STA_CONNECTED:
 			ESP_LOGI(TAG, "WIFI_EVENT_STA_CONNECTED");
+			
 			break;
 
 		case WIFI_EVENT_STA_DISCONNECTED:
@@ -77,6 +79,7 @@ static void wifi_app_event_handler(void *arg, esp_event_base_t event_base, int32
 		{
 		case IP_EVENT_STA_GOT_IP:
 			ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP");
+			wifi_app_send_message(WIFI_APP_MSG_STA_CONNECTED_GOT_IP);
 			break;
 		}
 	}
@@ -190,39 +193,48 @@ static void get_time_from_api(void)
 		.event_handler = NULL,
 	};
 	esp_http_client_handle_t client = esp_http_client_init(&config);
+	ESP_LOGI(TAG_HTTP, "HTTP client init");
+	esp_http_client_set_timeout_ms(client, 10000); // Set timeout to 10 seconds
 
-	esp_err_t err = esp_http_client_perform(client);
-	if (err == ESP_OK)
-	{
-		int status_code = esp_http_client_get_status_code(client);
-		if (status_code == 200)
-		{
-			char response_buffer[512];
-			int content_length = esp_http_client_get_content_length(client);
-			esp_http_client_read(client, response_buffer, content_length);
-			response_buffer[content_length] = '\0';
+	esp_err_t err;
+	int retry_count = 0;
+	const int max_retries = 5;
 
-			// Parse the JSON response
-			cJSON *json = cJSON_Parse(response_buffer);
-			if (json != NULL)
-			{
-				cJSON *datetime = cJSON_GetObjectItem(json, "datetime");
-				if (datetime != NULL)
-				{
-					ESP_LOGI(TAG, "Date and time: %s", datetime->valuestring);
+	do {
+		err = esp_http_client_perform(client);
+		if (err == ESP_OK) {
+			int status_code = esp_http_client_get_status_code(client);
+			if (status_code == 200) {
+				ESP_LOGI(TAG_HTTP, "Status code == 200");
+				char response_buffer[512];
+				int content_length = esp_http_client_get_content_length(client);
+				int total_read_len = 0, read_len;
+				while (total_read_len < content_length && (read_len = esp_http_client_read(client, response_buffer + total_read_len, content_length - total_read_len)) > 0) {
+					total_read_len += read_len;
 				}
-				cJSON_Delete(json);
+				response_buffer[total_read_len] = '\0';
+				ESP_LOGI(TAG_HTTP, "Response: %s", response_buffer);
+				// Parse the JSON response
+				cJSON *json = cJSON_Parse(response_buffer);
+				if (json != NULL) {
+					cJSON *datetime = cJSON_GetObjectItem(json, "datetime");
+					if (datetime != NULL) {
+						ESP_LOGI(TAG, "Date and time: %s", datetime->valuestring);
+					}
+					cJSON_Delete(json);
+					ESP_LOGI(TAG_HTTP, "cJSON_Delete(json)");
+				}
+				break; // Exit the loop if successful
+			} else {
+				ESP_LOGE(TAG, "HTTP request error, status code: %d", status_code);
 			}
+		} else {
+			ESP_LOGE(TAG, "HTTP request error: %s", esp_err_to_name(err));
 		}
-		else
-		{
-			ESP_LOGE(TAG, "HTTP request error, status code: %d", status_code);
-		}
-	}
-	else
-	{
-		ESP_LOGE(TAG, "HTTP request error: %s", esp_err_to_name(err));
-	}
+		retry_count++;
+		ESP_LOGI(TAG_HTTP, "Retrying... (%d/%d)", retry_count, max_retries);
+		vTaskDelay(pdMS_TO_TICKS(2000)); // Wait for 2 seconds before retrying
+	} while (err != ESP_OK && retry_count < max_retries);
 
 	esp_http_client_cleanup(client);
 }
@@ -258,7 +270,7 @@ static void wifi_app_task(void *pvParameters)
 			{
 			case WIFI_APP_MSG_START_HTTP_SERVER:
 				ESP_LOGI(TAG, "WIFI_APP_MSG_START_HTTP_SERVER");
-				get_time_from_api();
+				
 
 
 				break;
@@ -270,9 +282,11 @@ static void wifi_app_task(void *pvParameters)
 
 			case WIFI_APP_MSG_STA_CONNECTED_GOT_IP:
 				ESP_LOGI(TAG, "WIFI_APP_MSG_STA_CONNECTED_GOT_IP");
+				get_time_from_api();
 				//rgb_led_wifi_connected();
 
 				break;
+			
 
 			default:
 				break;
