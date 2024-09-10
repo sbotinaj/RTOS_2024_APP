@@ -55,6 +55,7 @@ static void wifi_app_event_handler(void *arg, esp_event_base_t event_base, int32
 
 		case WIFI_EVENT_STA_START:
 			ESP_LOGI(TAG, "WIFI_EVENT_STA_START");
+			esp_wifi_connect();
 			break;
 		
 		case WIFI_EVENT_SCAN_DONE:
@@ -170,6 +171,8 @@ static void wifi_app_sta_config(void)
 // Configure the station
 esp_wifi_set_mode(WIFI_MODE_STA);						///> Setting the mode as Access Point / Station Mode
 esp_wifi_set_config(ESP_IF_WIFI_STA, &sta_config);		///> Set our configuration
+// log console
+ESP_LOGI(TAG, "Configuring WiFi Station");
 //esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_AP_BANDWIDTH); ///> Our default bandwidth 20 MHz
 //esp_wifi_set_ps(WIFI_STA_POWER_SAVE);					///> Power save set to "NONE"
 }
@@ -180,45 +183,48 @@ esp_wifi_set_config(ESP_IF_WIFI_STA, &sta_config);		///> Set our configuration
 */
 static void get_time_from_api(void)
 {
-    esp_http_client_config_t config = {
-        .url = API_TIME_URL,
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&config);
+	esp_http_client_config_t config = {
+		.url = API_TIME_URL,
+		.host = API_TIME_HOST,
+		.auth_type = HTTP_AUTH_TYPE_NONE,
+		.event_handler = NULL,
+	};
+	esp_http_client_handle_t client = esp_http_client_init(&config);
 
-    esp_err_t err = esp_http_client_perform(client);
-    if (err == ESP_OK)
-    {
-        int status_code = esp_http_client_get_status_code(client);
-        if (status_code == 200)
-        {
-            char response_buffer[512];
-            int content_length = esp_http_client_get_content_length(client);
-            esp_http_client_read(client, response_buffer, content_length);
-            response_buffer[content_length] = '\0';
+	esp_err_t err = esp_http_client_perform(client);
+	if (err == ESP_OK)
+	{
+		int status_code = esp_http_client_get_status_code(client);
+		if (status_code == 200)
+		{
+			char response_buffer[512];
+			int content_length = esp_http_client_get_content_length(client);
+			esp_http_client_read(client, response_buffer, content_length);
+			response_buffer[content_length] = '\0';
 
-            // Parsear la respuesta JSON
-            cJSON *json = cJSON_Parse(response_buffer);
-            if (json != NULL)
-            {
-                cJSON *datetime = cJSON_GetObjectItem(json, "datetime");
-                if (datetime != NULL)
-                {
-                    ESP_LOGI(TAG, "Fecha y hora: %s", datetime->valuestring);
-                }
-                cJSON_Delete(json);
-            }
-        }
-        else
-        {
-            ESP_LOGE(TAG, "Error en la solicitud HTTP, código de estado: %d", status_code);
-        }
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Error en la solicitud HTTP: %s", esp_err_to_name(err));
-    }
+			// Parse the JSON response
+			cJSON *json = cJSON_Parse(response_buffer);
+			if (json != NULL)
+			{
+				cJSON *datetime = cJSON_GetObjectItem(json, "datetime");
+				if (datetime != NULL)
+				{
+					ESP_LOGI(TAG, "Date and time: %s", datetime->valuestring);
+				}
+				cJSON_Delete(json);
+			}
+		}
+		else
+		{
+			ESP_LOGE(TAG, "HTTP request error, status code: %d", status_code);
+		}
+	}
+	else
+	{
+		ESP_LOGE(TAG, "HTTP request error: %s", esp_err_to_name(err));
+	}
 
-    esp_http_client_cleanup(client);
+	esp_http_client_cleanup(client);
 }
 
 /**
