@@ -39,10 +39,20 @@ QueueHandle_t BQueue;  // Queue for the B values
 QueueHandle_t rangeTempMinQueue; // Queue for the range temperature min values
 QueueHandle_t rangeTempMaxQueue; // Queue for the range temperature max values
 
+// Queue for the GPIO interrupt
+
+QueueHandle_t gpio_evt_queue = NULL;
+QueueHandle_t gpio_flag_queue;
+
+
 
 // time of sending the data to the Queue and receiving the data from the Queue
 
 const TickType_t xTicksToWait = 100 / portTICK_PERIOD_MS;
+
+// GPIO interrupt pin
+
+#define GPIO_INTERR GPIO_NUM_33
 
 // ADC configuration
 
@@ -91,6 +101,8 @@ static void temp_read_task(void *pvParameters);
 
 static void rgb_task(void *pvParameters);
 
+static void button_task(void *pvParameters);
+
 /*END TASKS DEFINITIONS*/
 
 /*BEGIN MAIN CODE*/
@@ -107,16 +119,24 @@ void app_main(void)
      R0Queue = xQueueCreate(2, sizeof(int32_t));
      T0Queue = xQueueCreate(2, sizeof(int32_t));
      BQueue = xQueueCreate(2, sizeof(int32_t));
+
+    rangeTempMinQueue = xQueueCreate(2, sizeof(int32_t));
+    rangeTempMaxQueue = xQueueCreate(2, sizeof(int32_t));
+
+    // create Queue for the GPIO interrupt
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+
     // // initialize the RGB LED
     // create the heartbeat task
     xTaskCreate(heartbeat_task, "heartbeat_task", 1024 * 2, NULL, 1, NULL);
     // create the UART task
     xTaskCreate(uart_task, "uart_task", 1024 * 4, NULL, 10, NULL);
-    xTaskCreatePinnedToCore(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL, 0);
     //  create the temperature read task
-    //xTaskCreate(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL);
+    xTaskCreatePinnedToCore(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL, 0);
     // create the RGB task
-    // xTaskCreate(rgb_task, "rgb_task", 1024 * 4, NULL, 2, NULL);
+    xTaskCreate(rgb_task, "rgb_task", 1024 * 4, NULL, 2, NULL);
+    // create the button task
+    xTaskCreate(button_task, "button_task", 1024 * 2, NULL, 11, NULL);
     // xTaskCreatePinnedToCore(rgb_task, "rgb_task", 1024 * 4, NULL, 4, NULL, 0);
     // delay for 0.1 seconds
     vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -186,7 +206,7 @@ static void uart_task(void *pvParameters)
             {
                 // get the number from the command
                 int RANGE_TEMP_MIN = strtol((char *)&data[15], NULL, 10);
-                xQueueSend(uartQueue, &RANGE_TEMP_MIN, 100 / portTICK_PERIOD_MS);
+                xQueueSend(rangeTempMinQueue, &RANGE_TEMP_MIN, 100 / portTICK_PERIOD_MS);
                 printf("changed RANGE_TEMP_MIN to: %d\n", RANGE_TEMP_MIN);
             }
             // if the command is "RANGE_TEMP_MAX=num;"
@@ -194,7 +214,7 @@ static void uart_task(void *pvParameters)
             {
                 // get the number from the command
                 int RANGE_TEMP_MAX = strtol((char *)&data[15], NULL, 10);
-                xQueueSend(uartQueue, &RANGE_TEMP_MAX, 100 / portTICK_PERIOD_MS);
+                xQueueSend(rangeTempMaxQueue, &RANGE_TEMP_MAX, 100 / portTICK_PERIOD_MS);
                 printf("changed RANGE_TEMP_MAX to: %d\n", RANGE_TEMP_MAX);
             }
             else
@@ -205,9 +225,12 @@ static void uart_task(void *pvParameters)
         }
     }
 }
-
+// temperature read task
 static void temp_read_task(void *pvParameters)
 {
+    int time_to_wait = 0;
+    int gpio_flag = 0;
+    
     int32_t R_serie = 100;
     int32_t R0;
     int32_t T0;
@@ -272,73 +295,74 @@ static void temp_read_task(void *pvParameters)
         // convert the voltage to temperature
         Rt = (R_serie * voltage_v) / (3.3 - voltage_v);
         temp = B/(log(Rt/R0)+B/T0);
-        printf("ADC: %d, Voltage: %.3f mV, Temperature: %.2f C\n", adc_reading, voltage_v, temp);
-        // delay for 1 second
-        vTaskDelay(xTicksToWait);
+
 
         // send the temperature to the Queue
         xQueueSend(adcQueue, &temp, xTicksToWait);
+        // if receive gpio flag queue
+        xQueueReceive(gpio_flag_queue, &gpio_flag, 0);
+        if(gpio_flag != 0){
+            time_to_wait = 1000/portTICK_PERIOD_MS;
+        }
+        else{
+            printf("ADC: %d, Voltage: %.3f mV, Temperature: %.2f C\n", adc_reading, voltage_v, temp);
+            vTaskDelay(1000/portTICK_PERIOD_MS);
+        }
+
+        // delay for 0.1 second
+        vTaskDelay(xTicksToWait);
+
     }
 }
-
 // RGB task
-
 static void rgb_task(void *pvParameters)
 {
     init_rgb(PIN_RED, PIN_GREEN, PIN_BLUE);
     set_rgb_color(0, 0, 0);
 
     // adc value
-    int temp;
+    float temp;
     // variables for the RGB values
     uint32_t red = 0;
     uint32_t green = 0;
     uint32_t blue = 0;
-    // set the RGB color
-    // set_rgb_color(red, green, blue);
-    xQueueReceive(adcQueue, &temp, xTicksToWait); // temp from the Queue
-    // get the ranges temperature from the Queue
-    if (xQueueReceive(uartQueue, &RANGE_TEMP_MIN, xTicksToWait) != pdTRUE)
-    {
-        RANGE_TEMP_MIN = 15;
-        printf("Error al recibir la temperatura minima\n");
-    }
-    if (xQueueReceive(uartQueue, &RANGE_TEMP_MAX, xTicksToWait) != pdTRUE)
-    {
-        RANGE_TEMP_MAX = 25;
-        printf("Error al recibir la temperatura maxima\n");
-    }
+
+    int RANGE_TEMP_MAX = 25;
+    int RANGE_TEMP_MIN = 15;
 
     while (1)
     {
-
+        xQueueReceive(adcQueue, &temp, xTicksToWait); // temp from the Queue
+        xQueueReceive(rangeTempMinQueue, &RANGE_TEMP_MIN, xTicksToWait); 
+        xQueueReceive(rangeTempMaxQueue, &RANGE_TEMP_MAX, xTicksToWait);
         // change the RGB color based on the temperature
         if (temp < RANGE_TEMP_MIN)
         {
-            red = 255;
-            green = 0;
-            blue = 0;
+            red = 0;
+            green = 255;
+            blue = 255;
             set_rgb_color(red, green, blue);
+
         }
         else if (temp > RANGE_TEMP_MAX)
         {
-            red = 0;
-            green = 0;
-            blue = 255;
+            red = 255;
+            green = 255;
+            blue = 0;
             set_rgb_color(red, green, blue);
         }
         else
         {
-            red = 0;
-            green = 255;
-            blue = 0;
+            red = 255;
+            green = 0;
+            blue = 255;
             set_rgb_color(red, green, blue);
         }
         // delay for 0.1 second
         vTaskDelay(xTicksToWait);
     }
 }
-
+// heartbeat task
 static void heartbeat_task(void *pvParameters)
 {
     // configure the GPIO pin 2
@@ -352,6 +376,38 @@ static void heartbeat_task(void *pvParameters)
         vTaskDelay(1000 / portTICK_PERIOD_MS);
         gpio_set_level(GPIO_NUM_2, 1);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+// button task
+static void gpio_isr_handler(void *arg)
+{
+    uint32_t gpio_num = (uint32_t)arg;
+    // anti bounce
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+static void button_task(void *pvParameters)
+{
+    uint32_t io_num;
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    esp_rom_gpio_pad_select_gpio(GPIO_INTERR);
+    gpio_set_direction(GPIO_INTERR, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(GPIO_INTERR, GPIO_PULLUP_ONLY);
+    gpio_set_intr_type(GPIO_INTERR, GPIO_INTR_NEGEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(GPIO_INTERR, gpio_isr_handler, (void *)GPIO_INTERR);
+    while (1)
+    {
+        if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY))
+        {
+            xQueueSend(gpio_flag_queue, &io_num, 0);
+        }
+        else
+        {
+            printf("Queue error\n");
+        }
+        vTaskDelay(xTicksToWait);
     }
 }
 /*END TASKS PROTOTYPES*/

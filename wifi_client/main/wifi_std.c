@@ -11,11 +11,15 @@
 #include "esp_http_client.h" // HTTP client
 #include "cJSON.h"			 // JSON parser
 
+#include "esp_sntp.h" // SNTP client
+
 #include "wifi_std.h"
 
 // Tag used for ESP serial console messages
 static const char TAG[] = "wifi_app";
 static const char TAG_HTTP[] = "htttp_client";
+static const char TAG_SNTP[] = "sntp_client";
+
 //static const char TAG_STA[] = "wifi_sta";
 
 // Queue handle used to manipulate the main queue of events
@@ -262,6 +266,45 @@ static void get_time_from_api(void)
 	esp_http_client_cleanup(client);
 }
 
+static void initialize_sntp(void)
+{
+	ESP_LOGI(TAG_SNTP, "Initializing SNTP");
+	sntp_setoperatingmode(SNTP_OPMODE_POLL);
+	sntp_setservername(0, "pool.ntp.org");
+	sntp_init();
+}
+
+static void obtain_time(void)
+{
+	initialize_sntp();
+
+	// wait for time to be set
+	time_t now = 0;
+	struct tm timeinfo = {0};
+	int retry = 0;
+	const int retry_count = 10;
+	while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count) {
+		ESP_LOGI(TAG_SNTP, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+		vTaskDelay(pdMS_TO_TICKS(2000));
+		time(&now);
+		localtime_r(&now, &timeinfo);
+	}
+
+	// Set timezone to Colombia
+	setenv("TZ", "COT5", 1);
+	tzset();
+}
+
+
+static void print_current_time(void)
+{
+	time_t now;
+	struct tm timeinfo;
+	time(&now);
+	localtime_r(&now, &timeinfo);
+	ESP_LOGI(TAG_SNTP, "Current time: %s", asctime(&timeinfo));
+}
+
 /**
  * Main task for the WiFi application
  * @param pvParameters parameter which can be passed to the task
@@ -305,7 +348,9 @@ static void wifi_app_task(void *pvParameters)
 
 			case WIFI_APP_MSG_STA_CONNECTED_GOT_IP:
 				ESP_LOGI(TAG, "WIFI_APP_MSG_STA_CONNECTED_GOT_IP");
-				get_time_from_api();
+				//get_time_from_api();
+				obtain_time();
+				print_current_time();
 				//rgb_led_wifi_connected();
 
 				break;
