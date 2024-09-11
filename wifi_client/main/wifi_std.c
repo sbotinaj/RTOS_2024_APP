@@ -11,10 +11,15 @@
 #include "esp_http_client.h" // HTTP client
 #include "cJSON.h"			 // JSON parser
 
+#include "esp_sntp.h" // SNTP client
+
 #include "wifi_std.h"
 
 // Tag used for ESP serial console messages
 static const char TAG[] = "wifi_app";
+static const char TAG_HTTP[] = "htttp_client";
+static const char TAG_SNTP[] = "sntp_client";
+
 //static const char TAG_STA[] = "wifi_sta";
 
 // Queue handle used to manipulate the main queue of events
@@ -64,6 +69,7 @@ static void wifi_app_event_handler(void *arg, esp_event_base_t event_base, int32
 
 		case WIFI_EVENT_STA_CONNECTED:
 			ESP_LOGI(TAG, "WIFI_EVENT_STA_CONNECTED");
+			
 			break;
 
 		case WIFI_EVENT_STA_DISCONNECTED:
@@ -77,6 +83,7 @@ static void wifi_app_event_handler(void *arg, esp_event_base_t event_base, int32
 		{
 		case IP_EVENT_STA_GOT_IP:
 			ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP");
+			wifi_app_send_message(WIFI_APP_MSG_STA_CONNECTED_GOT_IP);
 			break;
 		}
 	}
@@ -178,6 +185,12 @@ ESP_LOGI(TAG, "Configuring WiFi Station");
 }
 
 
+// struct for save data of curl api
+typedef struct {
+	char *memory;
+	size_t size;
+} data_time;
+
 /*
 	get time from API
 */
@@ -190,41 +203,106 @@ static void get_time_from_api(void)
 		.event_handler = NULL,
 	};
 	esp_http_client_handle_t client = esp_http_client_init(&config);
+	ESP_LOGI(TAG_HTTP, "HTTP client init");
+	esp_http_client_set_timeout_ms(client, 10000); // Set timeout to 10 seconds
 
-	esp_err_t err = esp_http_client_perform(client);
-	if (err == ESP_OK)
-	{
-		int status_code = esp_http_client_get_status_code(client);
-		if (status_code == 200)
-		{
-			char response_buffer[512];
-			int content_length = esp_http_client_get_content_length(client);
-			esp_http_client_read(client, response_buffer, content_length);
-			response_buffer[content_length] = '\0';
+	esp_err_t err;
+	int retry_count = 0;
+	const int max_retries = 5;
 
-			// Parse the JSON response
-			cJSON *json = cJSON_Parse(response_buffer);
-			if (json != NULL)
-			{
-				cJSON *datetime = cJSON_GetObjectItem(json, "datetime");
-				if (datetime != NULL)
-				{
-					ESP_LOGI(TAG, "Date and time: %s", datetime->valuestring);
+	do {
+		err = esp_http_client_perform(client);
+		if (err == ESP_OK) {
+			int status_code = esp_http_client_get_status_code(client);
+			if (status_code == 200) {
+				// save data in struct
+				data_time data;
+				data.memory = malloc(1); // Will be grown as needed by the realloc
+				data.size = 0; // no data at this point
+				// get data from API
+				esp_http_client_fetch_headers(client);
+				//read full data
+				int content_length = esp_http_client_get_content_length(client);
+				char *buffer = malloc(content_length + 1);
+				if (buffer) {
+					int total_read_len = 0, read_len;
+					while (total_read_len < content_length) {
+						read_len = esp_http_client_read(client, buffer + total_read_len, content_length - total_read_len);
+						if (read_len <= 0) {
+							ESP_LOGE(TAG_HTTP, "Error reading data");
+							break;
+						}
+						total_read_len += read_len;
+					}
+					buffer[total_read_len] = '\0'; // Null-terminate the buffer
+
+					// Save the data in the struct
+					data.memory = realloc(data.memory, total_read_len + 1);
+					if (data.memory) {
+						memcpy(data.memory, buffer, total_read_len + 1);
+						data.size = total_read_len;
+						ESP_LOGI(TAG_HTTP, "Received data: %s", data.memory);
+					} else {
+						ESP_LOGE(TAG_HTTP, "Failed to allocate memory");
+					}
+					free(buffer);
+				} else {
+					ESP_LOGE(TAG_HTTP, "Failed to allocate buffer");
 				}
-				cJSON_Delete(json);
+
+
+				break; // Exit the loop if successful
+			} else {
+				ESP_LOGE(TAG, "HTTP request error, status code: %d", status_code);
 			}
+		} else {
+			ESP_LOGE(TAG, "HTTP request error: %s", esp_err_to_name(err));
 		}
-		else
-		{
-			ESP_LOGE(TAG, "HTTP request error, status code: %d", status_code);
-		}
-	}
-	else
-	{
-		ESP_LOGE(TAG, "HTTP request error: %s", esp_err_to_name(err));
-	}
+		retry_count++;
+		ESP_LOGI(TAG_HTTP, "Retrying... (%d/%d)", retry_count, max_retries);
+		vTaskDelay(pdMS_TO_TICKS(2000)); // Wait for 2 seconds before retrying
+	} while (err != ESP_OK && retry_count < max_retries);
 
 	esp_http_client_cleanup(client);
+}
+
+static void initialize_sntp(void)
+{
+	ESP_LOGI(TAG_SNTP, "Initializing SNTP");
+	sntp_setoperatingmode(SNTP_OPMODE_POLL);
+	sntp_setservername(0, "pool.ntp.org");
+	sntp_init();
+}
+
+static void obtain_time(void)
+{
+	initialize_sntp();
+
+	// wait for time to be set
+	time_t now = 0;
+	struct tm timeinfo = {0};
+	int retry = 0;
+	const int retry_count = 10;
+	while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count) {
+		ESP_LOGI(TAG_SNTP, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+		vTaskDelay(pdMS_TO_TICKS(2000));
+		time(&now);
+		localtime_r(&now, &timeinfo);
+	}
+
+	// Set timezone to Colombia
+	setenv("TZ", "COT5", 1);
+	tzset();
+}
+
+
+static void print_current_time(void)
+{
+	time_t now;
+	struct tm timeinfo;
+	time(&now);
+	localtime_r(&now, &timeinfo);
+	ESP_LOGI(TAG_SNTP, "Current time: %s", asctime(&timeinfo));
 }
 
 /**
@@ -258,7 +336,7 @@ static void wifi_app_task(void *pvParameters)
 			{
 			case WIFI_APP_MSG_START_HTTP_SERVER:
 				ESP_LOGI(TAG, "WIFI_APP_MSG_START_HTTP_SERVER");
-				get_time_from_api();
+				
 
 
 				break;
@@ -270,9 +348,13 @@ static void wifi_app_task(void *pvParameters)
 
 			case WIFI_APP_MSG_STA_CONNECTED_GOT_IP:
 				ESP_LOGI(TAG, "WIFI_APP_MSG_STA_CONNECTED_GOT_IP");
+				//get_time_from_api();
+				obtain_time();
+				print_current_time();
 				//rgb_led_wifi_connected();
 
 				break;
+			
 
 			default:
 				break;
