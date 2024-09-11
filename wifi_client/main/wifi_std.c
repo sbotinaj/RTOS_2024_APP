@@ -181,6 +181,12 @@ ESP_LOGI(TAG, "Configuring WiFi Station");
 }
 
 
+// struct for save data of curl api
+typedef struct {
+	char *memory;
+	size_t size;
+} data_time;
+
 /*
 	get time from API
 */
@@ -205,25 +211,42 @@ static void get_time_from_api(void)
 		if (err == ESP_OK) {
 			int status_code = esp_http_client_get_status_code(client);
 			if (status_code == 200) {
-				ESP_LOGI(TAG_HTTP, "Status code == 200");
-				char response_buffer[512];
+				// save data in struct
+				data_time data;
+				data.memory = malloc(1); // Will be grown as needed by the realloc
+				data.size = 0; // no data at this point
+				// get data from API
+				esp_http_client_fetch_headers(client);
+				//read full data
 				int content_length = esp_http_client_get_content_length(client);
-				int total_read_len = 0, read_len;
-				while (total_read_len < content_length && (read_len = esp_http_client_read(client, response_buffer + total_read_len, content_length - total_read_len)) > 0) {
-					total_read_len += read_len;
-				}
-				response_buffer[total_read_len] = '\0';
-				ESP_LOGI(TAG_HTTP, "Response: %s", response_buffer);
-				// Parse the JSON response
-				cJSON *json = cJSON_Parse(response_buffer);
-				if (json != NULL) {
-					cJSON *datetime = cJSON_GetObjectItem(json, "datetime");
-					if (datetime != NULL) {
-						ESP_LOGI(TAG, "Date and time: %s", datetime->valuestring);
+				char *buffer = malloc(content_length + 1);
+				if (buffer) {
+					int total_read_len = 0, read_len;
+					while (total_read_len < content_length) {
+						read_len = esp_http_client_read(client, buffer + total_read_len, content_length - total_read_len);
+						if (read_len <= 0) {
+							ESP_LOGE(TAG_HTTP, "Error reading data");
+							break;
+						}
+						total_read_len += read_len;
 					}
-					cJSON_Delete(json);
-					ESP_LOGI(TAG_HTTP, "cJSON_Delete(json)");
+					buffer[total_read_len] = '\0'; // Null-terminate the buffer
+
+					// Save the data in the struct
+					data.memory = realloc(data.memory, total_read_len + 1);
+					if (data.memory) {
+						memcpy(data.memory, buffer, total_read_len + 1);
+						data.size = total_read_len;
+						ESP_LOGI(TAG_HTTP, "Received data: %s", data.memory);
+					} else {
+						ESP_LOGE(TAG_HTTP, "Failed to allocate memory");
+					}
+					free(buffer);
+				} else {
+					ESP_LOGE(TAG_HTTP, "Failed to allocate buffer");
 				}
+
+
 				break; // Exit the loop if successful
 			} else {
 				ESP_LOGE(TAG, "HTTP request error, status code: %d", status_code);

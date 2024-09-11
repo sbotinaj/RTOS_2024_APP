@@ -217,6 +217,7 @@ static void temp_read_task(void *pvParameters)
     int adc_reading = 0;
     int voltage = 0;
     float temp = 0;
+    float voltage_v = 0;
 
     adc_cali_handle_t handle_calibrated;
     //-------------ADC2 Init---------------//
@@ -241,9 +242,9 @@ static void temp_read_task(void *pvParameters)
         .bitwidth = ADC_WIDTH,
     };
     adc_cali_create_scheme_line_fitting(&cali_config, &handle_calibrated);
-    R0 = 10000;
+    R0 = 47;
     T0 = 25;
-    B = 3950;
+    B = 2600;
 
     // receive the NTC values from the Queue
     
@@ -263,13 +264,15 @@ static void temp_read_task(void *pvParameters)
         // read the ADC value
         adc_oneshot_read(adc2_handle, ADC_CHANNEL, &adc_reading);
         // convert the ADC value to voltage
-        adc_cali_raw_to_voltage(handle_calibrated, adc_reading, &voltage);
+        //adc_cali_raw_to_voltage(handle_calibrated, adc_reading, &voltage);
+        //conver adc to voltage 
+        voltage_v = adc_reading * 3.3 /pow(2, ADC_WIDTH);
         // convert the mv to v 
-        voltage = voltage / 1000;
+        //voltage_v = voltage / 1000;
         // convert the voltage to temperature
-        Rt = (-voltage * R_serie) / (voltage - 3.3);
-        temp = (B*T0)/(T0*(B-log(Rt/R0)))-273.15;
-        printf("ADC: %d, Voltage: %d mV, Temperature: %.2f C\n", adc_reading, voltage, temp);
+        Rt = (R_serie * voltage_v) / (3.3 - voltage_v);
+        temp = B/(log(Rt/R0)+B/T0);
+        printf("ADC: %d, Voltage: %.3f mV, Temperature: %.2f C\n", adc_reading, voltage_v, temp);
         // delay for 1 second
         vTaskDelay(xTicksToWait);
 
