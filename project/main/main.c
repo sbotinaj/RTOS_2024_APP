@@ -44,6 +44,9 @@ QueueHandle_t rangeTempMaxQueue; // Queue for the range temperature max values
 QueueHandle_t gpio_evt_queue = NULL;
 QueueHandle_t gpio_flag_queue;
 
+// off leds queue
+
+QueueHandle_t off_leds_queue; // Queue for the off leds values
 
 
 // time of sending the data to the Queue and receiving the data from the Queue
@@ -78,8 +81,6 @@ const TickType_t xTicksToWait = 100 / portTICK_PERIOD_MS;
 
 // ranges for the temperature
 
-static int RANGE_TEMP_MIN = 15;
-static int RANGE_TEMP_MAX = 25;
 
 // variables for NTC
 
@@ -124,7 +125,11 @@ void app_main(void)
     rangeTempMaxQueue = xQueueCreate(2, sizeof(int32_t));
 
     // create Queue for the GPIO interrupt
-    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    gpio_evt_queue = xQueueCreate(2, sizeof(uint32_t));
+    gpio_flag_queue = xQueueCreate(2, sizeof(uint32_t));
+
+    // create the Queue for the off leds
+    off_leds_queue = xQueueCreate(2, sizeof(uint32_t));
 
     // // initialize the RGB LED
     // create the heartbeat task
@@ -132,11 +137,12 @@ void app_main(void)
     // create the UART task
     xTaskCreate(uart_task, "uart_task", 1024 * 4, NULL, 10, NULL);
     //  create the temperature read task
-    xTaskCreatePinnedToCore(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(temp_read_task, "temp_read_task", 1024 * 4, NULL, 3, NULL, 1);
     // create the RGB task
     xTaskCreate(rgb_task, "rgb_task", 1024 * 4, NULL, 2, NULL);
     // create the button task
-    xTaskCreate(button_task, "button_task", 1024 * 2, NULL, 11, NULL);
+    //xTaskCreate(button_task, "button_task", 1024 * 2, NULL, 11, NULL);
+    xTaskCreatePinnedToCore(button_task, "button_task", 1024 * 2, NULL, 11, NULL, 1);
     // xTaskCreatePinnedToCore(rgb_task, "rgb_task", 1024 * 4, NULL, 4, NULL, 0);
     // delay for 0.1 seconds
     vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -228,7 +234,7 @@ static void uart_task(void *pvParameters)
 // temperature read task
 static void temp_read_task(void *pvParameters)
 {
-    int time_to_wait = 0;
+    int time_to_wait = 1000/portTICK_PERIOD_MS;
     int gpio_flag = 0;
     
     int32_t R_serie = 100;
@@ -238,7 +244,6 @@ static void temp_read_task(void *pvParameters)
     // ADC INIT
     //  variables for the ADC value
     int adc_reading = 0;
-    int voltage = 0;
     float temp = 0;
     float voltage_v = 0;
 
@@ -302,11 +307,11 @@ static void temp_read_task(void *pvParameters)
         // if receive gpio flag queue
         xQueueReceive(gpio_flag_queue, &gpio_flag, 0);
         if(gpio_flag != 0){
-            time_to_wait = 1000/portTICK_PERIOD_MS;
+            time_to_wait = 100/portTICK_PERIOD_MS;
         }
         else{
             printf("ADC: %d, Voltage: %.3f mV, Temperature: %.2f C\n", adc_reading, voltage_v, temp);
-            vTaskDelay(1000/portTICK_PERIOD_MS);
+            vTaskDelay(time_to_wait);
         }
 
         // delay for 0.1 second
@@ -318,7 +323,7 @@ static void temp_read_task(void *pvParameters)
 static void rgb_task(void *pvParameters)
 {
     init_rgb(PIN_RED, PIN_GREEN, PIN_BLUE);
-    set_rgb_color(0, 0, 0);
+    set_rgb_color(255, 255, 255);
 
     // adc value
     float temp;
@@ -330,36 +335,49 @@ static void rgb_task(void *pvParameters)
     int RANGE_TEMP_MAX = 25;
     int RANGE_TEMP_MIN = 15;
 
+    int flag_off = 0;
+
     while (1)
     {
         xQueueReceive(adcQueue, &temp, xTicksToWait); // temp from the Queue
         xQueueReceive(rangeTempMinQueue, &RANGE_TEMP_MIN, xTicksToWait); 
         xQueueReceive(rangeTempMaxQueue, &RANGE_TEMP_MAX, xTicksToWait);
-        // change the RGB color based on the temperature
-        if (temp < RANGE_TEMP_MIN)
-        {
-            red = 0;
-            green = 255;
-            blue = 255;
-            set_rgb_color(red, green, blue);
+        xQueueReceive(off_leds_queue, &flag_off, 0);
 
-        }
-        else if (temp > RANGE_TEMP_MAX)
+        if (flag_off == 2)
         {
-            red = 255;
-            green = 255;
-            blue = 0;
-            set_rgb_color(red, green, blue);
+            set_rgb_color(0, 0, 0);
+            fprintf(stderr, "LEDs off\n");
         }
         else
         {
-            red = 255;
-            green = 0;
-            blue = 255;
-            set_rgb_color(red, green, blue);
+            // change the RGB color based on the temperature
+            if (temp < RANGE_TEMP_MIN)
+            {
+                red = 0;
+                green = 255;
+                blue = 255;
+                set_rgb_color(red, green, blue);
+
+            }
+            else if (temp > RANGE_TEMP_MAX)
+            {
+                red = 255;
+                green = 255;
+                blue = 0;
+                set_rgb_color(red, green, blue);
+            }
+            else
+            {
+                red = 255;
+                green = 0;
+                blue = 255;
+                set_rgb_color(red, green, blue);
+            }
+            // delay for 0.1 second
+            vTaskDelay(xTicksToWait);
         }
-        // delay for 0.1 second
-        vTaskDelay(xTicksToWait);
+        
     }
 }
 // heartbeat task
@@ -382,15 +400,14 @@ static void heartbeat_task(void *pvParameters)
 static void gpio_isr_handler(void *arg)
 {
     uint32_t gpio_num = (uint32_t)arg;
-    // anti bounce
-    vTaskDelay(50 / portTICK_PERIOD_MS);
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
 static void button_task(void *pvParameters)
 {
     uint32_t io_num;
-    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+    int count_press = 0; // variable for counting the number of button presses
+    //gpio_evt_queue = xQueueCreate(2, sizeof(uint32_t));
     esp_rom_gpio_pad_select_gpio(GPIO_INTERR);
     gpio_set_direction(GPIO_INTERR, GPIO_MODE_INPUT);
     gpio_set_pull_mode(GPIO_INTERR, GPIO_PULLUP_ONLY);
@@ -401,7 +418,19 @@ static void button_task(void *pvParameters)
     {
         if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY))
         {
-            xQueueSend(gpio_flag_queue, &io_num, 0);
+            count_press++;
+            if (count_press ==2)
+            {
+                io_num = 2;
+                count_press = 0;
+                xQueueSend(off_leds_queue, &io_num, 0);
+                printf("Button pressed\n");
+            }
+            else
+            {
+                xQueueSend(gpio_flag_queue, &io_num, 0);
+                printf("Button pressed\n"); 
+            }
         }
         else
         {

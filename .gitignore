@@ -5,3 +5,5 @@
 project/CMakeLists.txt
 project/sdkconfig
 project/main/CMakeLists.txt
+*.csv
+html_task/CMakeLists.txt
