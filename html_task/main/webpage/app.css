@@ -1,98 +1,128 @@
+/* styles.css */
 
-
+/* Estilos generales */
 body {
-    background-color: #91cce0;
-    font-family: HelveticaNeueRegular, HelveticaNeue-Regular, "Helvetica Neue Regular", HelveticaNeue, "Helvetica Neue", Helvetica, Arial;
-    color: #0272B7;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #eaeaea;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* Encabezado */
+header {
+  background-color: #34495e;
+  color: #ecf0f1;
+  padding: 20px 0;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 h1 {
-    display: block;
-    text-align: center;
-    margin: 0;
-    padding: 10px;
-    font-size: 1.7em;
-    color: #1d3557;
+  margin: 0;
+  text-align: center;
 }
 
-h2 {
-	font-size: 1.4em;
-    color: #1d3557;
+/* Contenido principal */
+main {
+  padding: 40px;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 20px auto;
+  max-width: 1200px;
+  text-align: center;
+  border-radius: 8px;
 }
 
-h3 {
-	font-size: 1.2em;
-    color: #1d3557;
+/* Sección de controles */
+.controls {
+  margin-bottom: 40px;
 }
 
-h4 {
-	font-size: 1em;
-    color: #1d3557;
+.checkbox-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
 
-.gr {
-	color: green;
-}
-.rd {
-	color: red;
-}
-
-#latest_firmware, #latest_firmware_label {
-	display:inline;
-}
-#latest_firmware {
-	color: #1d3557;
+.checkbox-container label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-#temperature_reading {
-	display:inline;
-	color: #1d3557;
+.arrow-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
-#humidity_reading {
-	display:inline;
-	color: #1d3557;
+.arrow-buttons button {
+  background-color: #3498db;
+  color: #ecf0f1;
+  border: none;
+  padding: 5px 10px;
+  font-size: 16px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 .buttons {
-    padding: 5px;
+  margin-top: 20px;
 }
 
-input[type="button"] {
-	font-size: 12px;
-	border: 0;
-    line-height: 2;
-    padding: 0 5px;
-    text-align: center;
-    color: #ffffff;
-    text-shadow: 1px 1px 1px #000;
-    border-radius: 10px;
-    background-color: RGBA(106,125,144,0.35);
-    background-image: linear-gradient(to top left,
-                                      rgba(0, 0, 0, .2),
-                                      rgba(0, 0, 0, .2) 30%,
-                                      rgba(0, 0, 0, 0));
-    box-shadow: inset 2px 2px 3px rgba(255, 255, 255, .6),
-                inset -2px -2px 3px rgba(0, 0, 0, .6);
+.buttons button {
+  background-color: #3498db;
+  color: #ecf0f1;
+  border: none;
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0 10px;
 }
 
-input[type="button"]:hover {
-    background-color: RGBA(112,164,222,0.68);
+/* Sección de datos recibidos */
+.received-data {
+  margin-top: 40px;
 }
 
-input[type="button"]:active {
-    box-shadow: inset -2px -2px 3px rgba(255, 255, 255, .6),
-                inset 2px 2px 3px rgba(0, 0, 0, .6);
+.received-data label {
+  display: block;
+  margin-bottom: 10px;
 }
 
+.received-data textarea {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  resize: none;
+}
 
+.button-glow {
+  box-shadow: 0 0 10px rgba(0, 89, 255, 0.8), 0 0 20px rgba(156, 186, 250, 0.6),
+    0 0 30px rgba(255, 255, 255, 0.4);
+  transition: box-shadow 0.05s ease-in-out;
+}
 
+.arrow-glow {
+  box-shadow: 0 0 10px rgba(0, 89, 255, 0.8), 0 0 20px rgba(156, 186, 250, 0.6),
+    0 0 30px rgba(255, 255, 255, 0.4);
+  transition: box-shadow 0.05s ease-in-out;
+}
 
-
-
-
-
-
-
-
-
+/* Pie de página */
+footer {
+  background-color: #2c3e50;
+  color: #ecf0f1;
+  text-align: center;
+  padding: 20px 0;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
