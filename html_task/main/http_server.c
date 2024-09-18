@@ -44,6 +44,8 @@
 #include "mqtt_client.h"
 #include "esp_sntp.h"
 
+#include "rgb.h"
+
 
 // Tag used for ESP serial console messages
 static const char TAG[] = "http_server";
@@ -125,9 +127,77 @@ static esp_err_t http_server_toogle_led_handler(httpd_req_t *req)
 	toogle_led();
 
 	// Cerrar la conexion
-    httpd_resp_set_hdr(req, "Connection", "close");
-    httpd_resp_send(req, NULL, 0);
-    
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
+	return ESP_OK;
+}
+
+// new function
+
+static esp_err_t http_server_red_up_glow_handler(httpd_req_t *req)
+{
+	ESP_LOGI(TAG, "/red_up_glow.json requested");
+
+	// Cerrar la conexion
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
+	return ESP_OK;
+}
+
+static esp_err_t http_server_green_up_glow_handler(httpd_req_t *req)
+{
+	ESP_LOGI(TAG, "/green_up_glow.json requested");
+
+	// Cerrar la conexion
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
+	return ESP_OK;
+}
+
+static esp_err_t http_server_blue_up_glow_handler(httpd_req_t *req)
+{
+	ESP_LOGI(TAG, "/blue_up_glow.json requested");
+
+	// Cerrar la conexion
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
+	return ESP_OK;
+}
+
+static esp_err_t http_server_red_down_glow_handler(httpd_req_t *req)
+{
+	ESP_LOGI(TAG, "/red_down_glow.json requested");
+
+	// Cerrar la conexion
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
+	return ESP_OK;
+}
+
+static esp_err_t http_server_green_down_glow_handler(httpd_req_t *req)
+{
+	ESP_LOGI(TAG, "/green_down_glow.json requested");
+
+	// Cerrar la conexion
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
+	return ESP_OK;
+}
+
+static esp_err_t http_server_blue_down_glow_handler(httpd_req_t *req)
+{
+	ESP_LOGI(TAG, "/blue_down_glow.json requested");
+
+	// Cerrar la conexion
+	httpd_resp_set_hdr(req, "Connection", "close");
+	httpd_resp_send(req, NULL, 0);
+
 	return ESP_OK;
 }
 
@@ -278,6 +348,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 			printf("toogle LED received");
 			toogle_led();
 			
+		}
+		if (strncmp(event->data, "recibirTemperatura", event->data_len) == 0){
+			//enviar a la pagina web la temperatura
+			printf("recibirTemperatura received");
+			char dhtSensorJSON[100];
+			sprintf(dhtSensorJSON, "{\"temp\":\"%.1f\",\"humidity\":\"%.1f\"}", 30.1, 40.5);
+			esp_mqtt_client_publish(client, "temperatura", dhtSensorJSON, 0, 1, 0);
+
 		}
 
 		
@@ -436,6 +514,7 @@ static esp_err_t http_server_jquery_handler(httpd_req_t *req)
  * @param req HTTP request for which the uri needs to be handled.
  * @return ESP_OK
  */
+
 static esp_err_t http_server_index_html_handler(httpd_req_t *req)
 {
 	ESP_LOGI(TAG, "index.html requested");
@@ -1201,11 +1280,8 @@ static httpd_handle_t http_server_configure(void)
 				.handler = http_server_get_dht_sensor_readings_json_handler,
 				.user_ctx = NULL
 		};
-	httpd_register_uri_handler(http_server_handle, &dht_sensor_json);
+		httpd_register_uri_handler(http_server_handle, &dht_sensor_json);
 
-
-
-		
 
 		// register wifiConnectStatus.json handler
 		httpd_uri_t wifi_connect_status_json = {
@@ -1224,11 +1300,54 @@ static httpd_handle_t http_server_configure(void)
 		};
 		httpd_register_uri_handler(http_server_handle, &read_range_uri );
 
+		//new uri handler
+		httpd_uri_t red_up_glow = {
+				.uri = "/red_up.json",
+				.method = HTTP_POST,
+				.handler = http_server_red_up_glow_handler,
+				.user_ctx = NULL
+		};
+		httpd_register_uri_handler(http_server_handle, &red_up_glow );
 
+		httpd_uri_t red_down_glow = {
+				.uri = "/red_down.json",
+				.method = HTTP_POST,
+				.handler = http_server_red_down_glow_handler,
+				.user_ctx = NULL
+		};
+		httpd_register_uri_handler(http_server_handle, &red_down_glow );
 
+		httpd_uri_t green_up_glow = {
+				.uri = "/green_up.json",
+				.method = HTTP_POST,
+				.handler = http_server_green_up_glow_handler,
+				.user_ctx = NULL
+		};
+		httpd_register_uri_handler(http_server_handle, &green_up_glow );
 
+		httpd_uri_t green_down_glow = {
+				.uri = "/green_down.json",
+				.method = HTTP_POST,
+				.handler = http_server_green_down_glow_handler,
+				.user_ctx = NULL
+		};
+		httpd_register_uri_handler(http_server_handle, &green_down_glow );
 
-		
+		httpd_uri_t blue_up_glow = {
+				.uri = "/blue_up.json",
+				.method = HTTP_POST,
+				.handler = http_server_blue_up_glow_handler,
+				.user_ctx = NULL
+		};
+		httpd_register_uri_handler(http_server_handle, &blue_up_glow );
+
+		httpd_uri_t blue_down_glow = {
+				.uri = "/blue_down.json",
+				.method = HTTP_POST,
+				.handler = http_server_blue_down_glow_handler,
+				.user_ctx = NULL
+		};
+		httpd_register_uri_handler(http_server_handle, &blue_down_glow );
 
 		return http_server_handle;
 	}
