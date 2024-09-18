@@ -9,19 +9,12 @@ var wifiConnectInterval = null;
 
 function toogle_led() {
   //activar función de efecto visual en boton
+  alert("LED toogled");
   $.ajax({
     url: "/toogle_led.json",
     dataType: "json",
     method: "POST",
     cache: false,
-    success: function (response) {
-      alert("Led toggled successfully");
-      // Aquí puedes agregar la lógica para manejar la respuesta exitosa
-    },
-    error: function (xhr, status, error) {
-      alert("Error toggling led: " + error);
-      // Aquí puedes agregar la lógica para manejar errores
-    },
   });
 }
 
@@ -29,7 +22,7 @@ function toogle_led() {
 function recibirTemperatura() {
   // enviar un request
   $.ajax({
-    url: "/get_temperature.json",
+    url: "/dhtSensor.json",
     dataType: "json",
     method: "POST",
     cache: false,
@@ -80,8 +73,33 @@ function flechaArriba() {
     }
   });
   if (id) {
-    alert("Flecha arriba presionada para " + id);
-    // Aquí puedes agregar la lógica para la flecha hacia arriba
+    if (id == "r") {
+      // enviar un request
+      $.ajax({
+        url: "/r_up.json",
+        dataType: "json",
+        method: "POST",
+        cache: false,
+      });
+    }
+    if (id == "g") {
+      // enviar un request
+      $.ajax({
+        url: "/g_up.json",
+        dataType: "json",
+        method: "POST",
+        cache: false,
+      });
+    }
+    if (id == "b") {
+      // enviar un request
+      $.ajax({
+        url: "/b_up.json",
+        dataType: "json",
+        method: "POST",
+        cache: false,
+      });
+    }
   } else {
     alert("No hay checkbox seleccionado");
   }
@@ -100,10 +118,37 @@ function flechaAbajo() {
     }
   });
   if (id) {
-    alert("Flecha abajo presionada para " + id);
-    // Aquí puedes agregar la lógica para la flecha hacia abajo
-  } else {
-    alert("No hay checkbox seleccionado");
+    if (id) {
+      if (id == "r") {
+        // enviar un request
+        $.ajax({
+          url: "/r_down.json",
+          dataType: "json",
+          method: "POST",
+          cache: false,
+        });
+      }
+      if (id == "g") {
+        // enviar un request
+        $.ajax({
+          url: "/g_down.json",
+          dataType: "json",
+          method: "POST",
+          cache: false,
+        });
+      }
+      if (id == "b") {
+        // enviar un request
+        $.ajax({
+          url: "/b_down.json",
+          dataType: "json",
+          method: "POST",
+          cache: false,
+        });
+      }
+    } else {
+      alert("No hay checkbox seleccionado");
+    }
   }
 }
 
