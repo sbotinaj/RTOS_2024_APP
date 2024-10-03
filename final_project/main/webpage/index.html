@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<script src='jquery-3.3.1.min.js'></script>
+	<link rel="stylesheet" href="app.css">
+	<script async src="app.js"></script>
+	<title>ESP32 Udemy Course</title>
+</head>
+
+<body>
+	<header>
+		<h1>ESP32 Application Development</h1>
+	</header>
+
+	<div id="OTA">
+		<h2>ESP32 Firmware Update</h2>
+		<label id="latest_firmware_label">Latest Firmware: </label>
+		<div id="latest_firmware"></div>
+		<input type="file" id="selected_file" accept=".bin" style="display: none;" onchange="getFileInfo()" />
+		<div class="buttons">
+			<input type="button" value="Select File" onclick="document.getElementById('selected_file').click();" />
+			<input type="button" value="Update Firmware" onclick="updateFirmware()" />
+		</div>
+		<h4 id="file_info"></h4>
+		<h4 id="ota_update_status"></h4>
+	</div>
+
+
+	<div id="WiFiConnect">
+		<h2>ESP32 WiFi Connect</h2>
+		<section>
+			<input id="connect_ssid" type="text" maxlength="32" placeholder="SSID" value="">
+			<input id="connect_pass" type="password" maxlength="64" placeholder="Password" value="">
+			<input type="checkbox" onclick="showPassword()">Show Password
+		</section>
+		<div class="buttons">
+			<input id="connect_wifi" type="button" value="Connect" />
+			
+		</div>
+		<div id="wifi_connect_credentials_errors"></div>
+		<h4 id="wifi_connect_status"></h4>
+	</div>
+
+	
+	<div id="DHT22Sensor">
+		<h2>Reading Sensors</h2>
+		<label for="temperature_reading">Temperature: </label>
+		<div id="temperature_reading"></div> 
+
+		<label for="humidity_reading">Humidity: </label>
+		<div id="humidity_reading"></div>
+	</div> 
+
+	<hr>
+
+
+	
+	<div class="container">
+		
+		<div class="led-control">
+			<h2>LED RGB Control</h2>
+			<div class="led-row">
+				<span>LEDR</span>
+				<input type="number" id="ledR_min_temp" name="ledR_min_temp" placeholder="Min Temp">
+				<input type="number" id="ledR_max_temp" name="ledR_max_temp" placeholder="Max Temp">
+				<input type="number" id="ledR_intensity" name="ledR_intensity" placeholder="Intensity">
+			</div>
+			<div class="led-row">
+				<span>LEDG</span>
+				<input type="number" id="ledG_min_temp" name="ledG_min_temp" placeholder="Min Temp">
+				<input type="number" id="ledG_max_temp" name="ledG_max_temp" placeholder="Max Temp">
+				<input type="number" id="ledG_intensity" name="ledG_intensity" placeholder="Intensity">
+			</div>
+			<div class="led-row">
+				<span>LEDB</span>
+				<input type="number" id="ledB_min_temp" name="ledB_min_temp" placeholder="Min Temp">
+				<input type="number" id="ledB_max_temp" name="ledB_max_temp" placeholder="Max Temp">
+				<input type="number" id="ledB_intensity" name="ledB_intensity" placeholder="Intensity">
+			</div>
+			<div class="led-buttons">
+				<input type="button" id="btnUpdate" value="Update" onclick="sendConfigRGB()">
+			</div>
+		</div>
+	
+		<div class="buzzer-control">
+			<h2>Buzzer Control</h2>
+			<label for="duty_cycle_buzzer">Buzzer Intensity: </label>
+			<div id="duty_cycle_buzzer"></div>
+			<div class="buzzer-row">
+				<span>BUZZER</span>
+				<input type="number" id="Buzzer_min_temp" name="Buzzer_min_temp" placeholder="Min Temp">
+				<input type="number" id="Buzzer_max_temp" name="Buzzer_max_temp" placeholder="Max Temp">
+			</div>
+			<div class="buzzer-buttons"> 
+				<input type="button" id="btnUpdateBuzzer" value="Update" onclick="sendConfigBuzzer()">
+			</div>
+		</div>
+	
+		<div class="fan-control">
+			<h2>FAN Control</h2>
+			<label for="duty_cycle_fan">Fan Intensity: </label>
+			<div id="duty_cycle_fan"></div>
+			<div class="fan-row">
+				<span>FAN</span>
+				<input type="number" id="Fan_min_temp" name="Fan_min_temp" placeholder="Min Temp">
+				<input type="number" id="Fan_max_temp" name="Fan_max_temp" placeholder="Max Temp">
+			</div>
+			<div class="fan-buttons"> 
+				<input type="button" id="btnUpdateFan" value="Update" onclick="sendConfigFan()">
+			</div>
+		</div>
+	</div>
+	
+	<!-- Botón fuera del contenedor -->
+	<div class="set-default-button">
+		<input type="button" id="btnSetDefault" value="Set as default" onclick="setDefault()">
+	</div>
+
+	<hr>
+
+	
+	
+	
+		
+	
+	
+
+	<!--  
+	<h2>LED RGB Control</h2>
+
+	<label for="duty_cycle_reading">Led Intensity: </label>
+	<div id="duty_cycle_reading"></div>
+
+	<div class="buttonsRGB">
+		<div class="color-selection">
+			<input type="radio" name="color" value="0" id="redRadio">
+			<label for="redRadio">RED</label>
+	
+			<input type="radio" name="color" value="1" id="greenRadio">
+			<label for="greenRadio">GREEN</label>
+	
+			<input type="radio" name="color" value="2" id="blueRadio">
+			<label for="blueRadio">BLUE</label>
+		</div>
+		
+
+		<div class="brightness-buttons">
+			<input type="button" id="btnDecrease" value="<" onclick="decreaseBrightness()" />
+			<input type="button" id="btnIncrease" value=">" onclick="increaseBrightness()" />
+		</div>
+	</div>
+
+
+
+
+
+
+
+
+-->
+
+	<!--
+	
+	
+	<div id="Configreading">
+		<h2>Tiempos configurados</h2>
+		<label for="reg_1">Registro 1: </label><br>
+		<label for="reg_2">Registro 2: </label><br>
+		<label for="reg_3">Registro 3: </label><br>
+		<label for="reg_4">Registro 4: </label><br>
+		<label for="reg_5">Registro 5: </label><br>
+		<label for="reg_6">Registro 6: </label><br>
+		<label for="reg_7">Registro 7: </label><br>
+		<label for="reg_8">Registro 8: </label><br>
+		<label for="reg_9">Registro 9: </label><br>
+		<label for="reg_10">Registro 10: </label><br>
+	</div>
+
+	<div id="Insert_mem">
+		<hr>
+		
+		<label for="selectNumber">Selecciona el registro a modificar:</label>
+		<select id="selectNumber" name="selectNumber" value="1">
+			<option value="1">1</option>
+			<option value="2">2</option>
+			<option value="3">3</option>
+			<option value="4">4</option>
+			<option value="5">5</option>
+			<option value="6">6</option>
+			<option value="7">7</option>
+			<option value="8">8</option>
+			<option value="9">9</option>
+			<option value="10">10</option>
+		</select>
+		<br><br>
+
+		
+		<label for="hours">Hora:</label>
+		<input type="number" id="hours" name="hours" min="0" max="23" value="12">
+
+		<label for="minutes">Minutos:</label>
+		<input type="number" id="minutes" name="minutes" min="0" max="59" value="30">
+
+		<br><br>
+
+		
+		<label>Días de la semana:</label><br>
+		<input type="checkbox" id="day_mon" name="day_mon" value="Monday" checked>
+		<label for="day_mon">Lunes</label>
+
+		<input type="checkbox" id="day_tue" name="day_tue" value="Tuesday">
+		<label for="day_tue">Martes</label>
+
+		<input type="checkbox" id="day_wed" name="day_wed" value="Wednesday">
+		<label for="day_wed">Miércoles</label>
+
+		<input type="checkbox" id="day_thu" name="day_thu" value="Thursday">
+		<label for="day_thu">Jueves</label>
+
+		<input type="checkbox" id="day_fri" name="day_fri" value="Friday">
+		<label for="day_fri">Viernes</label>
+
+		<input type="checkbox" id="day_sat" name="day_sat" value="Saturday">
+		<label for="day_sat">Sábado</label>
+
+		<input type="checkbox" id="day_sun" name="day_sun" value="Sunday">
+		<label for="day_sun">Domingo</label>
+		<br>
+		<button onclick="send_register()">Enviar Registro</button>
+		<button onclick="getregValues()">leer registro</button>
+		<button onclick="erase_reg()">borrar registro</button>
+
+	</div>
+	
+	
+
+
+
+	<hr>
+	-->
+
+</body>
+<html>
